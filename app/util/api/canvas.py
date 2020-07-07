@@ -3,7 +3,8 @@ import os
 
 url = {"prod":"https://ubc.instructure.com",
        "test":"https://ubc.test.instructure.com",
-       "beta":"https://ubc.beta.instructure.com"}
+       "beta":"https://ubc.beta.instructure.com",
+       "dev":"http://localhost:8900"}
 
 class CanvasInstance(APIInstance):
     def __init__(self, env=None):

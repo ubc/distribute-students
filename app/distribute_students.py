@@ -16,6 +16,12 @@ def distribute_students(parent_course_id, child_course_ids):
     
     _child_course_index = 0
 
+    # scan each child course for duplicate enrollments (multiple sections) and cleanup
+    for child_course_id in child_course_ids:
+        if not de_dup_students(child_course_id):
+            logging.error("Problem scanning child course {} for duplication".format(child_course_id))
+            return False
+
     while _child_course_index < len(child_course_ids):
         break_out = False
         
@@ -25,6 +31,19 @@ def distribute_students(parent_course_id, child_course_ids):
         
         if not student_list:
             return True
+
+        # if student already in one of the child courses, unenroll parent and pop the student from the student_list
+        dup_user_id_in_child_courses = students_in_courses(child_course_ids, list(student_list.keys()))
+        if dup_user_id_in_child_courses == False:
+            logging.info("Problem checking duplicate registration")
+            return False
+        for dup_user_id in dup_user_id_in_child_courses:
+            logging.info("Student user_id:{} - already in one of the child courses.  Unenroll from parent {} and skip".format(dup_user_id, parent_course_id))
+            enrollment = unenroll_user(parent_course_id, student_list[dup_user_id])
+            if not enrollment:
+                logging.warning("Could not unenroll user from course.")
+                return False
+            student_list.pop(dup_user_id, None)
 
         # randomize list
         items = list(student_list.items())
@@ -146,6 +165,48 @@ def unenroll_user(course_id, enrollment_id):
         return False
 
     return enrollment
+
+def students_in_courses(course_ids, student_user_ids):
+    """ Return a set of user id for those given user id registered as students in any given courses """
+    result = set()
+    for course_id in course_ids:
+        course_student_list = get_students(course_id)
+
+        if course_student_list == False:
+            return False
+
+        for user_id in student_user_ids:
+            if user_id in course_student_list:
+                result.add(user_id)
+    return result
+
+def de_dup_students(course_id):
+    """ Remove duplicate enrollments within a course """
+    students = canvas.call_api("courses/{course_id}/enrollments".format(course_id=course_id),
+                               post_fields={"type":"StudentEnrollment"})
+    if 'message' in students:
+        logging.warning(students['message'])
+        return False
+    if 'errors' in students:
+        for error in students['errors']:
+            logging.error(error['message'])
+        return False
+
+    # create a dict with user_id as key and list of enrollment_id as value
+    students = [(student['user_id'], student['id']) for student in students]
+    enrollment_in_course = collections.defaultdict(list)
+    for user_id, enrollment_id in students:
+        enrollment_in_course[user_id].append(enrollment_id)
+
+    for user_id in enrollment_in_course:
+        if len(enrollment_in_course.get(user_id)) > 1:
+            logging.info("Student user_id: {} enrolled in multiple sections of course {}. Remove all but one".format(user_id, course_id))
+            for enrollment_id in enrollment_in_course.get(user_id)[1:]:
+                if unenroll_user(course_id, enrollment_id) == False:
+                    logging.error("Problem unenrolling uer_id:{} with enrollment id {}".format(user_id, enrollment_id))
+                    return False
+
+    return True
 
 if __name__ == "__main__":
     # Get Input
