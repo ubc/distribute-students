@@ -75,18 +75,18 @@ def distribute_students(parent_course_id, child_course_ids):
                 break_out = True
                 break
 
-            # sort section list
-            sections = collections.OrderedDict(sorted(sections.items(), key=lambda t: t[1]))
+            # sort section list. fill up section by section
+            sections = collections.OrderedDict(sorted(sections.items(), key=lambda t: (-t[1], t[0])))
 
-            emptiest_section = next(iter(sections))
+            target_section = next(iter(sections))
 
             # Enroll user in least populated section
-            logging.info("Distributing user_id:{} into section_id:{}".format(student_id, emptiest_section))
-            enrollment = enroll_user(student_id, emptiest_section)
+            logging.info("Distributing user_id:{} into section_id:{}".format(student_id, target_section))
+            enrollment = enroll_user(student_id, target_section)
             if not enrollment:
                 logging.warning("Could not enroll user in section.")
                 return False
-            sections[emptiest_section] += 1
+            sections[target_section] += 1
 
             # Unenroll user from parent course
             enrollment = unenroll_user(parent_course_id, student_list[student_id])
