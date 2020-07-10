@@ -6,14 +6,15 @@ import sys
 import traceback
 import random
 import collections
+import os
 
 canvas = None
 
-_SECTION_ENROLLMENT_LIMIT = 35
+_SECTION_ENROLLMENT_LIMIT = int(os.getenv('SECTION_ENROLLMENT_LIMIT', 35))
 
 
 def distribute_students(parent_course_id, child_course_ids):
-    
+
     _child_course_index = 0
 
     # scan each child course for duplicate enrollments (multiple sections) and cleanup
@@ -24,11 +25,11 @@ def distribute_students(parent_course_id, child_course_ids):
 
     while _child_course_index < len(child_course_ids):
         break_out = False
-        
+
         # Get students from parent, as a list of user_ids
         student_list = get_students(parent_course_id)
         logging.info("{} students found to distribute.".format(len(student_list)))
-        
+
         if not student_list:
             return True
 
@@ -50,9 +51,9 @@ def distribute_students(parent_course_id, child_course_ids):
         random.shuffle(items)
         student_list = collections.OrderedDict(items)
 
-        
+
         child_course_id = child_course_ids[_child_course_index]
-        
+
         # Get sections from child course, as a OrderedDict with section_id as key user_count as value
         sections = get_sections(child_course_id)
         if not sections:
@@ -60,11 +61,11 @@ def distribute_students(parent_course_id, child_course_ids):
             _child_course_index += 1
             continue
 
-        # Distribute each student 
+        # Distribute each student
         for student_id in student_list:
-            
-            # Remove any sections with >LIMIT enrollment        
-            delete = [section for section in sections if sections[section] >= _SECTION_ENROLLMENT_LIMIT] 
+
+            # Remove any sections with >LIMIT enrollment
+            delete = [section for section in sections if sections[section] >= _SECTION_ENROLLMENT_LIMIT]
             for section in delete: del sections[section]
 
             # check if any sections remain
@@ -73,12 +74,12 @@ def distribute_students(parent_course_id, child_course_ids):
                 _child_course_index += 1
                 break_out = True
                 break
-            
+
             # sort section list
             sections = collections.OrderedDict(sorted(sections.items(), key=lambda t: t[1]))
 
             emptiest_section = next(iter(sections))
-            
+
             # Enroll user in least populated section
             logging.info("Distributing user_id:{} into section_id:{}".format(student_id, emptiest_section))
             enrollment = enroll_user(student_id, emptiest_section)
@@ -226,7 +227,7 @@ if __name__ == "__main__":
         logging.error("Unexpected error occured: {}:{}".format(type(e).__name__, e))
         logging.warning("Could not get input")
         sys.exit(1)
-        
+
     # Get Canvas instance
     try:
         logging.debug("Getting Canvas instance")
