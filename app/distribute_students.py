@@ -10,10 +10,7 @@ import os
 
 canvas = None
 
-_SECTION_ENROLLMENT_LIMIT = int(os.getenv('SECTION_ENROLLMENT_LIMIT', 35))
-
-
-def distribute_students(parent_course_id, child_course_ids):
+def distribute_students(parent_course_id, child_course_ids, student_limit):
 
     _child_course_index = 0
 
@@ -65,7 +62,7 @@ def distribute_students(parent_course_id, child_course_ids):
         for student_id in student_list:
 
             # Remove any sections with >LIMIT enrollment
-            delete = [section for section in sections if sections[section] >= _SECTION_ENROLLMENT_LIMIT]
+            delete = [section for section in sections if sections[section] >= student_limit]
             for section in delete: del sections[section]
 
             # check if any sections remain
@@ -244,12 +241,13 @@ if __name__ == "__main__":
             try:
                 parent_course_id = row[0]
                 child_course_ids = row[1].split(",")
-                logging.info("(parent:'{}', children:'{}') started".format(parent_course_id, child_course_ids))
-                distribute_students(parent_course_id, child_course_ids)
+                student_limit = row[2]
+                logging.info("(parent:'{}', children:'{}', student_limit:'{}') started".format(parent_course_id, child_course_ids, student_limit))
+                distribute_students(parent_course_id, child_course_ids, student_limit)
             except Exception as e:
                 traceback.print_exc()
                 logging.error("Unexpected error occured: {}:{}".format(type(e).__name__, e))
             finally:
-                logging.info("(parent:'{}', children:'{}') complete".format(parent_course_id, child_course_ids))
+                logging.info("(parent:'{}', children:'{}', student_limit:'{}') complete".format(parent_course_id, child_course_ids, student_limit))
     logging.info("Distribution completed.")
 
