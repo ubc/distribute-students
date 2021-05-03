@@ -20,15 +20,16 @@ def distribute_students(parent_course_id, child_course_ids, student_limit):
             logging.error("Problem scanning child course {} for duplication".format(child_course_id))
             return False
 
+    break_out = False
     while _child_course_index < len(child_course_ids):
-        break_out = False
 
         # Get students from parent, as a list of user_ids
         student_list = get_students(parent_course_id)
-        logging.info("{} students found to distribute.".format(len(student_list)))
 
         if not student_list:
-            return True
+            logging.info("No students found to distribute.")
+            return True        
+        logging.info("{} students found to distribute.".format(len(student_list)))
 
         # if student already in one of the child courses, unenroll parent and pop the student from the student_list
         dup_user_id_in_child_courses = students_in_courses(child_course_ids, list(student_list.keys()))
@@ -48,13 +49,12 @@ def distribute_students(parent_course_id, child_course_ids, student_limit):
         random.shuffle(items)
         student_list = collections.OrderedDict(items)
 
-
         child_course_id = child_course_ids[_child_course_index]
 
         # Get sections from child course, as a OrderedDict with section_id as key user_count as value
         sections = get_sections(child_course_id)
         if not sections:
-            logging.debug("section_id:{} - No sections found.".format(child_course_id))
+            logging.debug("course_id:{} - No sections found.".format(child_course_id))
             _child_course_index += 1
             continue
 
@@ -62,24 +62,30 @@ def distribute_students(parent_course_id, child_course_ids, student_limit):
         for student_id in student_list:
 
             # Remove any sections with >LIMIT enrollment
-            delete = [section for section in sections if sections[section] >= student_limit]
+            delete = [section for section in sections if sections[section]['count'] >= student_limit]
+            for section in delete: del sections[section]
+
+            # Remove any section that doesn't have a group_id associated with it
+            delete = [section for section in sections if 'group_id' not in sections[section]]
             for section in delete: del sections[section]
 
             # check if any sections remain
             if not sections:
-                logging.debug("section_id:{} - All sections full.".format(child_course_id))
+                logging.debug("course_id:{} - All sections full.".format(child_course_id))
                 _child_course_index += 1
                 break_out = True
                 break
 
             # sort section list. fill up section by section
-            sections = collections.OrderedDict(sorted(sections.items(), key=lambda t: (-t[1], t[0])))
+            sections = collections.OrderedDict(sorted(sections.items(), key=lambda t: -t[1]['count']))
 
             target_section = next(iter(sections))
 
+            group_id = sections[target_section]['group_id']
+
             # Enroll user in least populated section
             logging.info("Distributing user_id:{} into section_id:{}".format(student_id, target_section))
-            enrollment = enroll_user(student_id, target_section)
+            enrollment = enroll_user(student_id, target_section, group_id)
             if not enrollment:
                 logging.warning("Could not enroll user in section.")
                 return False
@@ -129,11 +135,29 @@ def get_sections(course_id):
         return False
 
     # convert to dict w/ section_id as key & student_count as value
-    return_dict = collections.OrderedDict([(section['id'], len(section['students']) if section['students'] else 0) for section in sections])
+    return_dict = collections.OrderedDict([(section['id'], {"name": section['name'], "count":len(section['students']) if section['students'] else 0}) for section in sections])
+
+    # get all the groups in the course
+    groups = canvas.call_api("courses/{course_id}/groups".format(course_id=course_id))
+    if 'message' in groups:
+        logging.warning(groups['message'])
+        return False
+    if 'errors' in groups:
+        for error in groups['errors']:
+            logging.error(error['message'])
+        return False
+
+    # assign a group_id if the last two characters matches the last two characters of the section name
+    for section in return_dict:
+        for group in groups:
+            if return_dict[section]['name'][-2:] == group['name'][-2:]:
+                return_dict[section]['group_id'] = group['id']
+                break
+    
     return return_dict
 
 
-def enroll_user(user_id, section_id):
+def enroll_user(user_id, section_id, group_id=None):
     logging.debug("Enrolling user_id:{user_id} in section_id:{section_id}".format(user_id=user_id,section_id=section_id))
     enrollment = canvas.call_api("sections/{section_id}/enrollments".format(section_id=section_id),
                                  method="POST",
@@ -146,6 +170,12 @@ def enroll_user(user_id, section_id):
         for error in enrollment['errors']:
             logging.error(error['message'])
         return False
+
+    # add user to group if given
+    if group_id:
+        group_membership= canvas.call_api("groups/{}/memberships".format(group_id),
+                                          method="POST",
+                                          post_fields={"user_id":user_id})
 
     return enrollment
 
