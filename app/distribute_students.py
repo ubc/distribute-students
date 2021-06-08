@@ -283,7 +283,7 @@ if __name__ == "__main__":
                 student_limit = row['student_limit']
                 loops = row['loops']
                 logging.info(f"(parent_course_id:{parent_course_id}, child_course_ids:{child_course_ids}, student_limit:{student_limit}, loops:{loops}) started")
-                distribute_students(parent_course_id, child_course_ids, student_limit, loops)
+                distribute_students(parent_course_id, child_course_ids, int(student_limit), int(loops))
             except Exception as e:
                 traceback.print_exc()
                 logging.error("Unexpected error occured: {}:{}".format(type(e).__name__, e))
