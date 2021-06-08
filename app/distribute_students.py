@@ -10,7 +10,7 @@ import os
 
 canvas = None
 
-def distribute_students(parent_course_id, child_course_ids, student_limit):
+def distribute_students(parent_course_id, child_course_ids, student_limit, loops=1):
 
     _child_course_index = 0
 
@@ -21,7 +21,7 @@ def distribute_students(parent_course_id, child_course_ids, student_limit):
             return False
 
     break_out = False
-    while _child_course_index < len(child_course_ids):
+    while _child_course_index < len(child_course_ids):    
 
         # Get students from parent, as a list of user_ids
         student_list = get_students(parent_course_id)
@@ -61,13 +61,22 @@ def distribute_students(parent_course_id, child_course_ids, student_limit):
         # Distribute each student
         for student_id in student_list:
 
-            # Remove any sections with >LIMIT enrollment
-            delete = [section for section in sections if sections[section]['count'] >= student_limit]
-            for section in delete: del sections[section]
+            sections_tmp = sections.copy()
 
-            # Remove any section that doesn't have a group_id associated with it
-            delete = [section for section in sections if 'group_id' not in sections[section]]
-            for section in delete: del sections[section]
+            for current_loop in range(loops):
+
+                sections = sections_tmp.copy()
+
+                # Remove any sections with >LIMIT enrollment
+                delete = [section for section in sections if sections[section]['count'] >= (student_limit * (current_loop+1))]
+                for section in delete: del sections[section]
+
+                # Remove any section that doesn't have a group_id associated with it
+                delete = [section for section in sections if 'group_id' not in sections[section]]
+                for section in delete: del sections[section]
+
+                if sections:
+                    break
 
             # check if any sections remain
             if not sections:
@@ -89,7 +98,7 @@ def distribute_students(parent_course_id, child_course_ids, student_limit):
             if not enrollment:
                 logging.warning("Could not enroll user in section.")
                 return False
-            sections[target_section] += 1
+            sections[target_section]['count'] += 1
 
             # Unenroll user from parent course
             enrollment = unenroll_user(parent_course_id, student_list[student_id])
@@ -242,7 +251,7 @@ if __name__ == "__main__":
         logging.debug("Getting input")
         if len(sys.argv) > 1:
             logging.info("Reading from file {}".format(sys.argv[1]))
-            _input = read_from_csv(sys.argv[1])
+            _input = read_from_csv(sys.argv[1], data_has_headers=True)
         elif not sys.stdin.isatty():
             logging.info("Reading from stdin...")
             _input = read_stdin_as_csv(sys.stdin)
@@ -269,15 +278,16 @@ if __name__ == "__main__":
     if _input:
         for row in _input:
             try:
-                parent_course_id = row[0]
-                child_course_ids = row[1].split(",")
-                student_limit = row[2]
-                logging.info("(parent:'{}', children:'{}', student_limit:'{}') started".format(parent_course_id, child_course_ids, student_limit))
-                distribute_students(parent_course_id, child_course_ids, student_limit)
+                parent_course_id = row['parent_course_id']
+                child_course_ids = row['student_course_ids'].split(",")
+                student_limit = row['student_limit']
+                loops = row['loops']
+                logging.info(f"(parent_course_id:{parent_course_id}, child_course_ids:{child_course_ids}, student_limit:{student_limit}, loops:{loops}) started")
+                distribute_students(parent_course_id, child_course_ids, student_limit, loops)
             except Exception as e:
                 traceback.print_exc()
                 logging.error("Unexpected error occured: {}:{}".format(type(e).__name__, e))
             finally:
-                logging.info("(parent:'{}', children:'{}', student_limit:'{}') complete".format(parent_course_id, child_course_ids, student_limit))
+                logging.info(f"(parent_course_id:{parent_course_id}, child_course_ids:{child_course_ids}, student_limit:{student_limit}, loops:{loops}) completed")
     logging.info("Distribution completed.")
 

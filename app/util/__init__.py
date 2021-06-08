@@ -23,12 +23,13 @@ root.addHandler(fh)
 
 # load the config file
 _ENV = os.environ.get("ENV")
+_TOKEN = os.environ.get("TOKEN")
 
 # create Canvas instance
 from util.api.canvas import CanvasInstance
 _canvas = None
-def get_canvas_instance():
+def get_canvas_instance(env=None, token=None):
     global _canvas
     if not _canvas:
-        _canvas = CanvasInstance()
+        _canvas = CanvasInstance(env, token)
     return _canvas

@@ -7,15 +7,15 @@ url = {"prod":"https://ubc.instructure.com",
        "dev":"http://localhost:8900"}
 
 class CanvasInstance(APIInstance):
-    def __init__(self, env=None):
+    def __init__(self, env=None, token=None):
         if not env:
             from .. import _ENV
             env = _ENV
-        _TOKEN = os.environ.get("TOKEN")
-        _URL = os.environ.get("URL")
-        if not _URL:
-            _URL = url[env]
-        APIInstance.__init__(self, bearer=_TOKEN, url=_URL)
+        if not token:
+            from .. import _TOKEN
+            token = _TOKEN
+        _URL = url[env]
+        APIInstance.__init__(self, bearer=token, url=_URL)
         if  self._base_url and 'api/v1' not in self._base_url:
             self._base_url = self._base_url + "/api/v1"
         self._urlencode=True
