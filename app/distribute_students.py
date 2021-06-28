@@ -70,8 +70,6 @@ def distribute_students(parent_course_id, child_course_ids, student_limit, loops
                 
                 sections_tmp = sections.copy()
 
-                logging.info(f"Getting sections with room, loop:{current_loop}")
-
                 # Remove any sections with >LIMIT enrollment
                 delete = [section for section in sections_tmp if sections_tmp[section]['count'] >= (student_limit * (current_loop+1))]
                 for section in delete: del sections_tmp[section]
