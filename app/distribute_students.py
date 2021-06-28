@@ -15,6 +15,7 @@ def distribute_students(parent_course_id, child_course_ids, student_limit, loops
     _child_course_index = 0
 
     # scan each child course for duplicate enrollments (multiple sections) and cleanup
+    logging.info("Running dedup")
     for child_course_id in child_course_ids:
         if not de_dup_students(child_course_id):
             logging.error("Problem scanning child course {} for duplication".format(child_course_id))
@@ -23,6 +24,7 @@ def distribute_students(parent_course_id, child_course_ids, student_limit, loops
     break_out = False
     while _child_course_index < len(child_course_ids):    
 
+        logging.info(f"Getting students from course_id:{parent_course_id}")
         # Get students from parent, as a list of user_ids
         student_list = get_students(parent_course_id)
 
@@ -32,6 +34,7 @@ def distribute_students(parent_course_id, child_course_ids, student_limit, loops
         logging.info("{} students found to distribute.".format(len(student_list)))
 
         # if student already in one of the child courses, unenroll parent and pop the student from the student_list
+
         dup_user_id_in_child_courses = students_in_courses(child_course_ids, list(student_list.keys()))
         if dup_user_id_in_child_courses == False:
             logging.info("Problem checking duplicate registration")
@@ -43,6 +46,7 @@ def distribute_students(parent_course_id, child_course_ids, student_limit, loops
                 logging.warning("Could not unenroll user from course.")
                 return False
             student_list.pop(dup_user_id, None)
+        logging.info(f"Dedup complete")
 
         # randomize list
         items = list(student_list.items())
@@ -54,43 +58,45 @@ def distribute_students(parent_course_id, child_course_ids, student_limit, loops
         # Get sections from child course, as a OrderedDict with section_id as key user_count as value
         sections = get_sections(child_course_id)
         if not sections:
-            logging.debug("course_id:{} - No sections found.".format(child_course_id))
+            logging.info("course_id:{} - No sections found.".format(child_course_id))
             _child_course_index += 1
             continue
+
 
         # Distribute each student
         for student_id in student_list:
 
-            sections_tmp = sections.copy()
-
             for current_loop in range(loops):
+                
+                sections_tmp = sections.copy()
 
-                sections = sections_tmp.copy()
+                logging.info(f"Getting sections with room, loop:{current_loop}")
 
                 # Remove any sections with >LIMIT enrollment
-                delete = [section for section in sections if sections[section]['count'] >= (student_limit * (current_loop+1))]
-                for section in delete: del sections[section]
+                delete = [section for section in sections_tmp if sections_tmp[section]['count'] >= (student_limit * (current_loop+1))]
+                for section in delete: del sections_tmp[section]
 
                 # Remove any section that doesn't have a group_id associated with it
-                delete = [section for section in sections if 'group_id' not in sections[section]]
-                for section in delete: del sections[section]
+                delete = [section for section in sections_tmp if 'group_id' not in sections_tmp[section]]
+                for section in delete: del sections_tmp[section]
 
-                if sections:
+                if sections_tmp:
                     break
 
+
             # check if any sections remain
-            if not sections:
-                logging.debug("course_id:{} - All sections full.".format(child_course_id))
+            if not sections_tmp:
+                logging.info("course_id:{} - All sections full.".format(child_course_id))
                 _child_course_index += 1
                 break_out = True
                 break
 
             # sort section list. fill up section by section
-            sections = collections.OrderedDict(sorted(sections.items(), key=lambda t: -t[1]['count']))
+            sections_tmp = collections.OrderedDict(sorted(sections_tmp.items(), key=lambda t: -t[1]['count']))
 
-            target_section = next(iter(sections))
+            target_section = next(iter(sections_tmp))
 
-            group_id = sections[target_section]['group_id']
+            group_id = sections_tmp[target_section]['group_id']
 
             # Enroll user in least populated section
             logging.info("Distributing user_id:{} into section_id:{}".format(student_id, target_section))
@@ -115,7 +121,7 @@ def distribute_students(parent_course_id, child_course_ids, student_limit, loops
 
 def get_students(course_id):
     logging.debug("Getting students for course_id:{}".format(course_id))
-    students = canvas.call_api("courses/{course_id}/enrollments".format(course_id=course_id),
+    students = canvas.call_api("courses/{course_id}/enrollments?per_page=100".format(course_id=course_id),
                                post_fields={"type":"StudentEnrollment"})
     if 'message' in students:
         logging.warning(students['message'])
@@ -133,7 +139,7 @@ def get_students(course_id):
 
 def get_sections(course_id):
     logging.debug("Getting sections for course_id:{}".format(course_id))
-    sections = canvas.call_api("courses/{course_id}/sections".format(course_id=course_id),
+    sections = canvas.call_api("courses/{course_id}/sections?per_page=100".format(course_id=course_id),
                                post_fields={"include":"students"})
     if 'message' in sections:
         logging.warning(sections['message'])
@@ -219,7 +225,7 @@ def students_in_courses(course_ids, student_user_ids):
 
 def de_dup_students(course_id):
     """ Remove duplicate enrollments within a course """
-    students = canvas.call_api("courses/{course_id}/enrollments".format(course_id=course_id),
+    students = canvas.call_api("courses/{course_id}/enrollments?per_page=100".format(course_id=course_id),
                                post_fields={"type":"StudentEnrollment"})
     if 'message' in students:
         logging.warning(students['message'])
